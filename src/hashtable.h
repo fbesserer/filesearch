@@ -1,6 +1,8 @@
 #ifndef HASHTABLE_H
 #define HASHTABLE_H
 
+#include <stdbool.h>
+
 typedef struct {
     unsigned short marker;
     bool found; 

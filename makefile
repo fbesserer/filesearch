@@ -25,7 +25,7 @@ $(BIN): $(OBJS)
 $(OBJ)/%.o: $(SRC)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-hashtable: $(SRC)/hashtable.c $(SRC)/hashtable.h
+hashtable: ht.c $(SRC)/hashtable.h
 	$(CC) $(CFLAGS) $^ -o $@
 
 $(TESTBINDIR): 
@@ -35,7 +35,7 @@ $(TESTBINDIR)/%: $(TEST)/%.c $(OBJS)
 	$(CC) $(CFLAGS) $< $(OBJ)/hashtable.o -o $@ -lcriterion
 
 test: $(TESTBINDIR) $(TESTBINS)
-	for test in $(TESTBINS); do ./$$test; done 
+	for test in $(TESTBINS); do ./$$test --verbose; done 
 
 clean:
 	$(RM) $(BINDIR)/* $(OBJ)/*
