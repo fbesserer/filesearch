@@ -25,7 +25,7 @@ $(BIN): $(OBJS)
 $(OBJ)/%.o: $(SRC)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-hashtable: ht.c $(SRC)/hashtable.h
+hashtable: ht.c 
 	$(CC) $(CFLAGS) $^ -o $@
 
 $(TESTBINDIR): 
