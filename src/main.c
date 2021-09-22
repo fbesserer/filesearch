@@ -43,6 +43,7 @@ void skip_headers(FILE *fstream, unsigned long long start) {
 	headersize = headerbuf[2] << 8 | headerbuf[3];
 	if (DEBUG) printf("headersize: %x\n", headersize);
 	fseek(fstream, start + 2 + headersize, SEEK_SET); 
+	printf("byte after skip header: %lx\n", ftell(fstream));
 }
 
 int find_jpg_markers(FILE *fstream, unsigned long long start, markers *jpg_markers[]) {
@@ -57,6 +58,7 @@ int find_jpg_markers(FILE *fstream, unsigned long long start, markers *jpg_marke
 	fread(apphbuf, 1, 6, fstream);
 	apphsize = apphbuf[4] << 8 | apphbuf[5];
 	if (DEBUG) printf("apphsize: %x\n", apphsize);
+
 	fseek(fstream, start + 4 + apphsize, SEEK_SET); 
 	
 	if (DEBUG) {
@@ -81,9 +83,31 @@ int find_jpg_markers(FILE *fstream, unsigned long long start, markers *jpg_marke
 				{
 				case 3: jpg_markers[3]->found = true;
 						printf("ffdb at: %llx\n", pos);
-						skip_headers(fstream, pos);
+						skip_headers(fstream, pos); // skip headers muss einen wert zurückgeben um den i nach vorne gesetzt wird
 					break;
-				
+				case 0: if (jpg_markers[3]->found) {
+							jpg_markers[0]->found = true;
+							printf("ffc0 at: %llx\n", pos);
+							skip_headers(fstream, pos);
+						}
+					break;
+				case 4: if (jpg_markers[0]->found) {
+							jpg_markers[4]->found = true;
+							printf("ffc4 (huffman table) at: %llx\n", pos);
+							skip_headers(fstream, pos);
+						}
+					break;
+				case 2: if (jpg_markers[4]->found) {
+							jpg_markers[2]->found = true;
+							printf("ffda at: %llx\n", pos);
+							skip_headers(fstream, pos);
+						}
+					break;
+				case 1: if (jpg_markers[2]->found) {
+							printf("ffd9 at: %llx\n", pos);
+							//jpg abspeichern
+						}
+					break;
 				default:
 					break;
 				}
@@ -99,93 +123,9 @@ int find_jpg_markers(FILE *fstream, unsigned long long start, markers *jpg_marke
 	//fseek(fstream, nr of processed bytes, SEEK_SET);
 	return EXIT_SUCCESS;
 }
-/*
-int search_jpgs(FILE *fstream) {
-	unsigned int c, jpg_nr=0;
-	long int start, end;
 
-	//jpeg Anfang suchen
-	while ((c = fgetc(fstream)) != EOF) {
-			if (c == 0xff) {
-				if (fgetc(fstream) == 0xd8) {
-					if (fgetc(fstream) == 0xff) {
-						printf("found beginning of a jpeg at %lx\n", ftell(fstream)-2);
-						start = ftell(fstream) - 2;
 
-						//jpeg Ende suchen
-						while ((c = fgetc(fstream)) != EOF) {
-							if (c == 0xff) {
-								if(fgetc(fstream) == 0xd9){
-									printf("end found at %lx\n", ftell(fstream)-2);
-									end = ftell(fstream);
-
-									//jpeg abspeichern
-									extract_jpg(fstream, start, end - start, jpg_nr);
-									fseek(fstream, end, SEEK_SET);
-									jpg_nr++;
-									break;
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	return EXIT_SUCCESS;
-}*/
-/*
-int search_jpgs(FILE *fstream) {
-	unsigned int jpg_nr=0, soi_count=0, sod_count=0, eoi_count=0;
-	unsigned long soi, eoi;
-	unsigned char buffer[BLOCKSIZE + 1]; 
-	//unsigned char *sod=0xffda, *eoi=0xffd9, *soi=0xffd8;
-	bool eof_flag = false, soi_found = false;
-
-	while (1) {
-		if (fread(buffer, 1, BLOCKSIZE, fstream) != BLOCKSIZE) eof_flag = true;
-		for (int i = 0; i <= BLOCKSIZE - 4; i++) { 
-			// start of image (ffd8ffex) finden - lesen bis BLOCKSIZE -4 (4. letzter Eintrag)
-			if ( !soi_found && buffer[i] == 0xff && buffer[i+1] == 0xd8 && buffer[i+2] == 0xff && (buffer[i+3]==0xee||buffer[i+3]==0xed||buffer[i+3]==0xec||buffer[i+3]==0xe0||buffer[i+3]==0xe1||buffer[i+3]==0xe2||buffer[i+3]==0xe3)) {
-				soi = ftell(fstream) - (BLOCKSIZE - i);
-				soi_count++;
-				soi_found = true;
-				printf("%x %x %x %x bei %lx\n", buffer[i], buffer[i+1], buffer[i+2], buffer[i+3], soi);
-			}
-			else if (soi_found) {
-				//another soi (thumbnail etc) ?
-				if ( buffer[i] == 0xff && buffer[i+1] == 0xd8 && buffer[i+2] == 0xff && (buffer[i+3]==0xee||buffer[i+3]==0xed||buffer[i+3]==0xec||buffer[i+3]==0xe0||buffer[i+3]==0xe1||buffer[i+3]==0xe2||buffer[i+3]==0xe3)) {
-					soi_count++;
-				//start of data - jpg body? 
-				} else if (buffer[i] == 0xff && buffer[i+1] == 0xda) {
-					sod_count++;
-				//end of image?
-				} else if (buffer[i] == 0xff && buffer[i+1] == 0xd9) {
-					eoi = ftell(fstream) - (BLOCKSIZE - i) + 2;
-					eoi_count++;
-				}
-				if (soi_count == eoi_count) {
-					//bild speichern
-					//printf("stream davor: soi: %lu eoi: %lu actual: %ld i: %d\n", soi, eoi, ftell(fstream), i);
-					if (jpg_nr < 100) {
-						extract_jpg(fstream, soi, eoi - soi, jpg_nr);
-					//	printf("stream danach: %ld \n", ftell(fstream));
-					}
-					jpg_nr++;
-					soi_found = false;
-					soi_count = eoi_count = sod_count = 0;
-				}
-			}
-		}
-		//fptr um 3 zurücksetzen, eof checken, buffer leeren
-		fseek(fstream, ftell(fstream) - 3, SEEK_SET);
-		//printf("stream: %ld\n", ftell(fstream));
-		if (eof_flag) break;
-		memset(buffer, '\0', BLOCKSIZE);
-	}
-	return EXIT_SUCCESS;
-}*/
-
-int search_jpgs(FILE *fstream) {
+int search_jpgs(FILE *fstream, fpos_t fpos) {
 	unsigned long long soi;
 	unsigned char buffer[BLOCKSIZE + 1]; 
 	markers *jpg_markers[HT_SIZE];
@@ -208,6 +148,7 @@ int search_jpgs(FILE *fstream) {
 				if (DEBUG) printf("%x %x %x %x bei %llx\n", buffer[i], buffer[i+1], buffer[i+2], buffer[i+3], soi);
 				find_jpg_markers(fstream, soi, jpg_markers);
 				printf("fstream after find jpg markers: %llx\n", ftell(fstream));
+				break; //nach find_jpg_marker muss aus for loop raus gesprungen werden 
 			}
 		}
 		//set fptr back by 3, check eof, empty buffer
@@ -221,6 +162,7 @@ int search_jpgs(FILE *fstream) {
 
 int main (int argc, char *argv[]) {
 	FILE *fstream;
+	fpos_t fpos;
 	int err; 
 	
 	if (argc < 2) {
@@ -232,7 +174,7 @@ int main (int argc, char *argv[]) {
 		printf("File could not be opened");
 		return EXIT_FAILURE;
 	} else {
-		err = search_jpgs(fstream);
+		err = search_jpgs(fstream, fpos);
 		if (err) return EXIT_FAILURE;
 	}
 	fclose(fstream);
