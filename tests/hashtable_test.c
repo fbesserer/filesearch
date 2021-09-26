@@ -41,6 +41,7 @@ Test(hashtable_test, isinhashtable, .description=descr) {
     cr_expect(in_hashtable(hashtable, 0xffd9) != -1, "Expected 0xffd9 in hashtable");
     cr_expect(in_hashtable(hashtable, 0xffd7) == -1, "0xffd7 shouldn't be in hashtable");
     cr_expect(in_hashtable(hashtable, 0xffdc) == -1, "0xffdc shouldn't be in hashtable");
+    cr_expect(in_hashtable(hashtable, 0x7368) == -1, "0x7368 shouldn't be in hashtable");
     cr_assert(strlen("") == 0);
 }
 
