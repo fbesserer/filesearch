@@ -38,13 +38,14 @@ int hash(unsigned short *marker) {
     if (NULL == marker) {
         return -1;
     } else {
-        return (int) *marker % 6;
+        return (int) *marker % 39;
     }
 }
 
 void fill_hashtable(markers *ht[]) {
     // initialises and fills the hashtable with the jpg markers, static so that information is not lost when function is exited
     init_hashtable(ht);
+    /*
     static markers qt =  {.marker = 0xffdb};
     static markers sof = {.marker = 0xffc0};
     static markers huf = {.marker = 0xffc4};
@@ -54,15 +55,40 @@ void fill_hashtable(markers *ht[]) {
     ht[hash(&sof.marker)]= &sof;
     ht[hash(&huf.marker)]= &huf;
     ht[hash(&sod.marker)]= &sod;
+    ht[hash(&eoi.marker)]= &eoi;*/
+    static markers qt =  {.marker = 0xffdb};
+    static markers sof = {.marker = 0xffc0};
+    static markers huf = {.marker = 0xffc4};
+    static markers sod = {.marker = 0xffda};
+    static markers eoi = {.marker = 0xffd9};
+    static markers app0 =  {.marker = 0xffe0};
+    static markers app1 = {.marker = 0xffe1};
+    static markers app2 = {.marker = 0xffe2};
+    static markers app3 = {.marker = 0xffe3};
+    static markers app4 = {.marker = 0xffec};
+    static markers app5 =  {.marker = 0xffed};
+    static markers app6 = {.marker = 0xffee};
+
+    ht[hash(&qt.marker)]= &qt;
+    ht[hash(&sof.marker)]= &sof;
+    ht[hash(&huf.marker)]= &huf;
+    ht[hash(&sod.marker)]= &sod;
     ht[hash(&eoi.marker)]= &eoi;
+    ht[hash(&app0.marker)]= &app0;
+    ht[hash(&app1.marker)]= &app1;
+    ht[hash(&app2.marker)]= &app2;
+    ht[hash(&app3.marker)]= &app3;
+    ht[hash(&app4.marker)]= &app4;
+    ht[hash(&app5.marker)]= &app5;
+    ht[hash(&app6.marker)]= &app6;
 }
 
-int in_hashtable(markers *ht[], unsigned short search) {
+unsigned short in_hashtable(markers *ht[], unsigned short search) {
     // returns bucket if bytes are present inside 
     int bucket = hash(&search);
     if (ht[bucket] != NULL && ht[bucket]->marker == search) {
-        return bucket;    
+        return search;    
     }
-    return -1;
+    return 0xffff;
 }
 

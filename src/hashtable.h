@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#define TABLE_SIZE 6
+#define TABLE_SIZE 40
 
 typedef struct {
     unsigned short marker;
@@ -13,7 +13,7 @@ typedef struct {
 int init_hashtable(markers *ht[]);
 void print_hashtable(markers *ht[]);
 int hash(unsigned short *marker);
-int in_hashtable(markers *ht[], unsigned short search);
+unsigned short in_hashtable(markers *ht[], unsigned short search);
 void fill_hashtable(markers *ht[]);
 
 #endif
