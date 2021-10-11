@@ -7,7 +7,7 @@
 
 #define HT_SIZE TABLE_SIZE
 #define FILENAMESIZE 256
-#define BLOCKSIZE 4096
+#define BLOCKSIZE 1048576
 #define DEBUG 1
 
 int extract_jpg(FILE *fstream, long int bytes) {
@@ -16,7 +16,7 @@ int extract_jpg(FILE *fstream, long int bytes) {
 	static unsigned int jpg_nr=0;
 	char filename[FILENAMESIZE]; 
 	
-	if (DEBUG) if (jpg_nr > 100) return EXIT_FAILURE;
+	if (DEBUG) if (jpg_nr > 1000) return EXIT_FAILURE;
 	
 	//printf("bytes: %lx\n", bytes);
 	snprintf(filename, FILENAMESIZE, "pics/jpg_%d.jpg", jpg_nr);
@@ -33,6 +33,7 @@ int extract_jpg(FILE *fstream, long int bytes) {
 	
 
 	fclose(jpg_file);
+	printf("\n Picture found and saved under jpg_%d.jpg\n\n", jpg_nr);
 	jpg_nr++;
 	return EXIT_SUCCESS;
 }
@@ -125,7 +126,7 @@ int find_jpg_markers(FILE *fstream, markers *jpg_markers[], fpos_t *fpos) {
 								skip_headers(fstream);
 							}
 					break;
-				case 0xffda: if (jpg_markers[hash(&ffc4)]->found) {
+				case 0xffda: if (jpg_markers[hash(&ffc4)]->found || jpg_markers[hash(&ffdb)]->found) {
 								jpg_markers[hash(&ffda)]->found = true;
 								printf("ffda at: %llx read blocks: %d\n", pos, read);
 								printf("%lx\n", ftell(fstream));	
@@ -139,9 +140,12 @@ int find_jpg_markers(FILE *fstream, markers *jpg_markers[], fpos_t *fpos) {
 							//jpg abspeichern
 							fsetpos(fstream, fpos);
 							//printf("%lx\n", ftell(fstream));	
-							extract_jpg(fstream, pos - start);
-							//delete all jpg markers again
-
+							if (extract_jpg(fstream, pos - start) != 0) return EXIT_FAILURE;
+							//set back markers to false
+							jpg_markers[hash(&ffdb)]->found = false;
+							jpg_markers[hash(&ffc0)]->found = false;
+							jpg_markers[hash(&ffc4)]->found = false;
+							jpg_markers[hash(&ffda)]->found = false;
 							
 							// return back to search_jpgs()
 							return EXIT_SUCCESS;
@@ -175,6 +179,7 @@ int search_jpgs(FILE *fstream, fpos_t *fpos) {
 	unsigned char buffer[BLOCKSIZE + 1]; 
 	markers *jpg_markers[HT_SIZE];
 	//bool eof_flag = false;
+	int progress=0;
 
 	fill_hashtable(jpg_markers);
 	if (DEBUG) print_hashtable(jpg_markers);
@@ -196,10 +201,14 @@ int search_jpgs(FILE *fstream, fpos_t *fpos) {
 				if (find_jpg_markers(fstream, jpg_markers, fpos) == 1) {
 					return EXIT_FAILURE;
 				}
-				//printf("fstream after find jpg markers: %lx\n", ftell(fstream));
+				printf("\n fstream after find jpg markers: %lx\n\n", ftell(fstream));
 				break; //nach find_jpg_marker muss aus for loop raus gesprungen werden 
 			}
 		}
+		if (progress % 100 == 0) {
+			printf("currently at position: %lx (%ld MB)\n", ftell(fstream), ftell(fstream)/(1024*1024));
+		}
+		progress++;
 		//set fptr back by 3, check eof, empty buffer
 		fseek(fstream, ftell(fstream) - 3, SEEK_SET);
 		memset(buffer, '\0', BLOCKSIZE);
@@ -218,7 +227,7 @@ int main (int argc, char *argv[]) {
 	}
 	fstream = fopen(argv[1], "r");
 	if (fstream == NULL) {
-		printf("File could not be opened");
+		printf("File could not be opened\n");
 		return EXIT_FAILURE;
 	} else {
 		err = search_jpgs(fstream, &fpos);
