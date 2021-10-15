@@ -7,7 +7,7 @@
 
 #define HT_SIZE TABLE_SIZE
 #define FILENAMESIZE 256
-#define BLOCKSIZE 1048576
+#define BLOCKSIZE 4000000 //1048576
 #define DEBUG 1
 
 int extract_jpg(FILE *fstream, long int bytes) {
@@ -56,21 +56,29 @@ int find_jpg_markers(FILE *fstream, markers *jpg_markers[], fpos_t *fpos) {
 	unsigned char apphbuf[6];
 	bool eof_flag = false;
 	unsigned short apphsize, current_bytes;
+	unsigned short header=10;
 	unsigned long long pos, start;
 	unsigned short current_marker, ffdb=0xffdb, ffda=0xffda, ffc0=0xffc0, ffc4=0xffc4;
-	//unsigned short ffe0=0xffe0, ffe1=0xffe1, ffe2=0xffe2, ffe3=0xffe3, ffec=0xffec, ffed=0xffed, ffee=0xffee, ffd9=0xffd9;
 	unsigned int read;
 
 	start = ftell(fstream);
 	//save position
 	fgetpos(fstream, fpos);
 
-	//skip application header 0x(ffd8)ffe?. Bytes 5&6 contain the size application header (excluding the count for the ffe? marker) when counting from ffd8 start 
-	fread(apphbuf, 1, 6, fstream);
+	//skip application header 0x(ffd8)ffe*. Bytes 5&6 contain the size of the application header (excluding the count for the ffe? marker) when counting from ffd8 start 
+	fread(apphbuf, 1, header, fstream);
 	apphsize = apphbuf[4] << 8 | apphbuf[5];
 	if (DEBUG) printf("apphsize: %x\n", apphsize);
 
-	fseek(fstream, apphsize - 2, SEEK_CUR); // the 2 size bytes count themselves to the header part to be skipped
+	// check if valid jpg
+	for (int i = 6; i < 10; i++) {
+		if (apphbuf[i] > 'z' || apphbuf[i] < 'A') {
+			printf("not a valid jpg, header is: %x %x %x %x\n", apphbuf[6],apphbuf[7],apphbuf[8],apphbuf[9]);
+			return 2;
+		}
+	}
+	// -2 because the two bytes containing the app header size don't count to the header size to be skipped
+	fseek(fstream, apphsize - (header - 2), SEEK_CUR); 
 	
 	if (DEBUG) {
 		memset(apphbuf, '\0', 6);
@@ -103,9 +111,14 @@ int find_jpg_markers(FILE *fstream, markers *jpg_markers[], fpos_t *fpos) {
 				//printf("ht value: %d\n", hash(&current_marker));
 
 				switch (current_marker)
-				{
+				{ //application header can be different from soi 
 				case 0xffe0: case 0xffe1: case 0xffe2: case 0xffe3: case 0xffec: case 0xffed: case 0xffee: 
-						printf("found another application header: %llx\n", pos);
+						// if (jpg_markers[hash(&ffdb)]->found) {
+						//	// zurück auf start von anfang setzen
+						//	fsetpos(fstream, fpos);
+						// 	return EXIT_SUCCESS;
+						// }
+						printf("found another application header %x: %llx\n", current_marker, pos);
 						skip_headers(fstream);
 					break;
 				case 0xffdb: jpg_markers[hash(&ffdb)]->found = true;
@@ -126,7 +139,7 @@ int find_jpg_markers(FILE *fstream, markers *jpg_markers[], fpos_t *fpos) {
 								skip_headers(fstream);
 							}
 					break;
-				case 0xffda: if (jpg_markers[hash(&ffc4)]->found || jpg_markers[hash(&ffdb)]->found) {
+				case 0xffda: if (jpg_markers[hash(&ffc4)]->found || jpg_markers[hash(&ffc0)]->found) {
 								jpg_markers[hash(&ffda)]->found = true;
 								printf("ffda at: %llx read blocks: %d\n", pos, read);
 								printf("%lx\n", ftell(fstream));	
@@ -140,7 +153,7 @@ int find_jpg_markers(FILE *fstream, markers *jpg_markers[], fpos_t *fpos) {
 							//jpg abspeichern
 							fsetpos(fstream, fpos);
 							//printf("%lx\n", ftell(fstream));	
-							if (extract_jpg(fstream, pos - start) != 0) return EXIT_FAILURE;
+							if (extract_jpg(fstream, pos - start + 2) != 0) return EXIT_FAILURE;
 							//set back markers to false
 							jpg_markers[hash(&ffdb)]->found = false;
 							jpg_markers[hash(&ffc0)]->found = false;
@@ -193,19 +206,21 @@ int search_jpgs(FILE *fstream, fpos_t *fpos) {
 		}
 		for (int i = 0; i <= BLOCKSIZE - 4; i++) { 
 			// find start of image (ffd8ffex) - read until BLOCKSIZE -4 (4th last entry)
-			if ( buffer[i] == 0xff && buffer[i+1] == 0xd8 && buffer[i+2] == 0xff && (buffer[i+3]==0xee||buffer[i+3]==0xed||buffer[i+3]==0xec||buffer[i+3]==0xe0||buffer[i+3]==0xe1||buffer[i+3]==0xe2||buffer[i+3]==0xe3)) {
+			if ( buffer[i] == 0xff && buffer[i+1] == 0xd8 && buffer[i+2] == 0xff && (buffer[i+3]==0xed||buffer[i+3]==0xe0||buffer[i+3]==0xe1)) {
 				
+				// find and position cursor at the beginning of the jpg
 				soi = ftell(fstream) - (BLOCKSIZE - i);
 				fseek(fstream, - (BLOCKSIZE - i), SEEK_CUR);
 				if (DEBUG) printf("%x %x %x %x bei %llx\n", buffer[i], buffer[i+1], buffer[i+2], buffer[i+3], soi);
-				if (find_jpg_markers(fstream, jpg_markers, fpos) == 1) {
+
+				if (find_jpg_markers(fstream, jpg_markers, fpos) == EXIT_FAILURE) {
 					return EXIT_FAILURE;
 				}
-				printf("\n fstream after find jpg markers: %lx\n\n", ftell(fstream));
+				printf("\nfstream after find jpg markers: %lx\n\n", ftell(fstream));
 				break; //nach find_jpg_marker muss aus for loop raus gesprungen werden 
 			}
 		}
-		if (progress % 100 == 0) {
+		if (progress % 30 == 0) {
 			printf("currently at position: %lx (%ld MB)\n", ftell(fstream), ftell(fstream)/(1024*1024));
 		}
 		progress++;
